@@ -246,59 +246,71 @@ function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
 }
 
 const getNearMeNotesController = async (req, res) => {
-  try {
-    const { latitude, longitude, distance } = req.query;
+    try {
+      const { latitude, longitude, distance } = req.query;
 
-    // Validate
-    if (!latitude || !longitude || !distance) {
-      return res.status(400).send({
-        success: false,
-        message: "Please provide latitude, longitude and distance in km"
-      });
-    }
-
-    // Convert to numbers
-    const lat = parseFloat(latitude);
-    const lon = parseFloat(longitude);
-    const distKm = parseFloat(distance);
-
-    if (isNaN(lat) || isNaN(lon) || isNaN(distKm)) {
-      return res.status(400).send({
-        success: false,
-        message: "Invalid query parameters. Must be numbers."
-      });
-    }
-
-    // Find all notes of logged-in user
-    const allNotes = await noteModel.find({ userId: req.user.id });
-
-    // Filter notes within distance
-    const nearbyNotes = allNotes.filter(note => {
-      if (!note.location || !note.location.latitude || !note.location.longitude) {
-        return false;
+  
+      if (!latitude || !longitude || !distance) {
+        return res.status(400).send({
+          success: false,
+          message: "Please provide latitude, longitude and distance in km"
+        });
       }
-      const noteLat = note.location.latitude;
-      const noteLon = note.location.longitude;
-      const noteDistance = getDistanceFromLatLonInKm(lat, lon, noteLat, noteLon);
-      return noteDistance <= distKm;
-    });
-
-    return res.status(200).send({
-      success: true,
-      message: "Nearby notes fetched successfully",
-      total: nearbyNotes.length,
-      notes: nearbyNotes
-    });
-
-  } catch (error) {
-    return res.status(500).send({
-      success: false,
-      message: "Error in get near me notes controller",
-      error
-    });
-  }
-};
-
+  
+      const lat = parseFloat(latitude);
+      const lon = parseFloat(longitude);
+      const distKm = parseFloat(distance);
+  
+      if (isNaN(lat) || isNaN(lon) || isNaN(distKm)) {
+        return res.status(400).send({
+          success: false,
+          message: "Invalid query parameters. Must be numbers."
+        });
+      }
+  
+      const allNotes = await noteModel
+        .find({ userId: req.user.id })
+        .select('title text mood image createdAt location');
+  
+      const nearbyNotes = allNotes.filter(note => {
+        if (!note.location || !note.location.latitude || !note.location.longitude) {
+          return false;
+        }
+        const noteLat = note.location.latitude;
+        const noteLon = note.location.longitude;
+        const noteDistance = getDistanceFromLatLonInKm(lat, lon, noteLat, noteLon);
+        return noteDistance <= distKm;
+      }).map(note => {
+        let imageBase64 = null;
+        if (note.image && note.image.data) {
+          imageBase64 = `data:${note.image.contentType};base64,${note.image.data.toString('base64')}`;
+        }
+        return {
+          ...note.toObject(),
+          imageBase64
+        };
+      });
+      
+      
+  
+      return res.status(200).send({
+        success: true,
+        message: "Nearby notes fetched successfully",
+        total: nearbyNotes.length,
+        notes: nearbyNotes
+      });
+  
+    } catch (error) {
+      console.error(error);
+      return res.status(500).send({
+        success: false,
+        message: "Error in get near me notes controller",
+        error: error.message
+      });
+    }
+  };
+  
+  
 
 
 
